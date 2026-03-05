@@ -1,330 +1,398 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Krishna AR Demo</title>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <title>Krishna AR Demo</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
 
-<!-- Correct script order -->
-<script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    body {
+      background:#000;
+      font-family:'Georgia',serif;
+      height:100vh; width:100vw;
+      overflow:hidden;
+      user-select:none;
+      -webkit-user-select:none;
+    }
 
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
+    /* ── CAMERA (live background) ── */
+    #cam {
+      position:fixed; inset:0; z-index:1;
+      width:100%; height:100%;
+      object-fit:cover;
+      display:none;
+    }
 
-body{
-background:#000;
-font-family:Georgia,serif;
-overflow:hidden;
-height:100vh;
-width:100vw;
-}
+    /* ── DARK TINT over camera when video plays ── */
+    #tint {
+      position:fixed; inset:0; z-index:2;
+      background:rgba(0,0,0,0.55);
+      display:none;
+    }
 
-/* Loading */
-#loading-screen{
-position:fixed;
-inset:0;
-background:linear-gradient(135deg,#1a0a2e,#2d1557,#1a0a2e);
-display:flex;
-flex-direction:column;
-align-items:center;
-justify-content:center;
-z-index:9999;
-transition:opacity .8s ease;
-}
+    /* ── VIDEO floats over camera ── */
+    #vid-wrap {
+      position:fixed;
+      top:50%; left:50%;
+      transform:translate(-50%,-50%) scale(0.85);
+      z-index:3;
+      width:92vw;
+      max-width:480px;
+      aspect-ratio:16/9;
+      border-radius:8px;
+      overflow:hidden;
+      box-shadow:0 0 60px rgba(245,200,66,0.35), 0 20px 60px rgba(0,0,0,0.8);
+      border:1.5px solid rgba(245,200,66,0.4);
+      display:none;
+      opacity:0;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
 
-#loading-screen.hidden{
-opacity:0;
-pointer-events:none;
-}
+    #vid-wrap.show {
+      display:block;
+      opacity:1;
+      transform:translate(-50%,-50%) scale(1);
+    }
 
-.om-symbol{
-font-size:72px;
-color:#f5c842;
-animation:pulse 2s ease-in-out infinite;
-margin-bottom:20px;
-}
+    #vid {
+      width:100%; height:100%;
+      object-fit:cover;
+      background:#000;
+    }
 
-@keyframes pulse{
-0%,100%{transform:scale(1)}
-50%{transform:scale(1.1)}
-}
+    /* ── CLOSE button ── */
+    #close-btn {
+      position:fixed;
+      top:16px; right:16px;
+      z-index:10;
+      background:rgba(0,0,0,0.6);
+      border:1px solid rgba(245,200,66,0.5);
+      color:#f5c842;
+      width:38px; height:38px;
+      border-radius:50%;
+      font-size:18px;
+      cursor:pointer;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      -webkit-tap-highlight-color:transparent;
+    }
 
-.loading-title{
-color:#f5c842;
-font-size:22px;
-letter-spacing:4px;
-margin-bottom:8px;
-}
+    /* ── SCAN UI (corners + line) ── */
+    #scan-ui {
+      position:fixed; inset:0; z-index:4;
+      pointer-events:none;
+      display:none;
+    }
 
-.loading-subtitle{
-color:rgba(245,200,66,.6);
-font-size:13px;
-letter-spacing:2px;
-margin-bottom:40px;
-}
+    .corner {
+      position:absolute;
+      width:36px; height:36px;
+      border-color:#f5c842; border-style:solid;
+    }
+    .tl { top:22%; left:8%;  border-width:3px 0 0 3px; }
+    .tr { top:22%; right:8%; border-width:3px 3px 0 0; }
+    .bl { bottom:22%; left:8%;  border-width:0 0 3px 3px; }
+    .br { bottom:22%; right:8%; border-width:0 3px 3px 0; }
 
-.loading-bar-wrap{
-width:220px;
-height:2px;
-background:rgba(245,200,66,.15);
-margin-bottom:16px;
-}
+    .scan-line {
+      position:absolute;
+      left:8%; right:8%;
+      height:2px;
+      background:linear-gradient(to right, transparent, #f5c842, transparent);
+      animation: sweep 2s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0%   { top:22%; opacity:1; }
+      100% { top:78%; opacity:0.2; }
+    }
 
-.loading-bar{
-height:100%;
-background:#f5c842;
-animation:load 3s ease forwards;
-}
+    /* ── TAP TO REVEAL button (shown after scanning) ── */
+    #reveal-btn {
+      position:fixed;
+      bottom:10%;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:5;
+      background:#f5c842;
+      color:#1a0a2e;
+      border:none;
+      padding:15px 44px;
+      font-size:14px;
+      letter-spacing:3px;
+      text-transform:uppercase;
+      font-family:'Georgia',serif;
+      border-radius:3px;
+      cursor:pointer;
+      display:none;
+      white-space:nowrap;
+      -webkit-tap-highlight-color:transparent;
+      animation:pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow:0 4px 20px rgba(245,200,66,0.4); }
+      50%      { box-shadow:0 4px 50px rgba(245,200,66,0.8); }
+    }
 
-@keyframes load{
-0%{width:0}
-100%{width:100%}
-}
+    /* ── SCAN HINT text ── */
+    #hint {
+      position:fixed;
+      bottom:6%;
+      left:50%; transform:translateX(-50%);
+      z-index:5;
+      color:rgba(245,200,66,0.75);
+      font-size:12px;
+      letter-spacing:2px;
+      text-align:center;
+      white-space:nowrap;
+      display:none;
+      text-shadow:0 1px 6px rgba(0,0,0,0.9);
+    }
 
-/* Instructions */
+    /* ── WELCOME SCREEN ── */
+    #welcome {
+      position:fixed; inset:0; z-index:20;
+      background:linear-gradient(160deg,#12062b 0%,#2a1155 50%,#12062b 100%);
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:32px; text-align:center;
+    }
 
-#instructions{
-position:fixed;
-bottom:0;
-left:0;
-right:0;
-padding:20px;
-background:linear-gradient(to top,rgba(0,0,0,.85),transparent);
-z-index:100;
-text-align:center;
-}
+    .om {
+      font-size:88px; color:#f5c842;
+      animation:omGlow 3s ease-in-out infinite;
+      margin-bottom:12px;
+      line-height:1;
+    }
+    @keyframes omGlow {
+      0%,100% { text-shadow:0 0 30px rgba(245,200,66,0.4); }
+      50%      { text-shadow:0 0 80px rgba(245,200,66,0.9); }
+    }
 
-.instruction-text{
-color:#f5c842;
-font-size:15px;
-}
+    .w-title {
+      color:#f5c842;
+      font-size:22px; letter-spacing:6px;
+      text-transform:uppercase;
+      margin-bottom:6px;
+    }
 
-.scan-icon{
-font-size:28px;
-display:block;
-margin-bottom:6px;
-}
+    .w-sub {
+      color:rgba(245,200,66,0.45);
+      font-size:12px; letter-spacing:2px;
+      margin-bottom:52px;
+    }
 
-/* Brand */
+    .w-btn {
+      background:transparent;
+      border:1.5px solid #f5c842;
+      color:#f5c842;
+      padding:16px 52px;
+      font-size:13px; letter-spacing:4px;
+      text-transform:uppercase;
+      font-family:'Georgia',serif;
+      border-radius:2px;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+      transition:background 0.2s;
+    }
+    .w-btn:active { background:rgba(245,200,66,0.12); }
 
-#brand-bar{
-position:fixed;
-top:0;
-left:0;
-right:0;
-padding:14px 20px;
-background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent);
-z-index:100;
-display:flex;
-align-items:center;
-gap:10px;
-opacity:0;
-}
+    .w-note {
+      color:rgba(245,200,66,0.3);
+      font-size:10px; letter-spacing:1px;
+      margin-top:18px; line-height:1.8;
+    }
 
-#brand-bar.visible{opacity:1}
+    /* ── ERROR SCREEN ── */
+    #err {
+      position:fixed; inset:0; z-index:30;
+      background:#12062b;
+      display:none; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:32px; text-align:center;
+    }
 
-.brand-dot{
-width:8px;
-height:8px;
-border-radius:50%;
-background:#f5c842;
-}
+    .err-icon { font-size:52px; margin-bottom:16px; }
+    .err-title { color:#f5c842; font-size:17px; letter-spacing:2px; margin-bottom:10px; }
+    .err-body  { color:rgba(255,255,255,0.55); font-size:12px; line-height:1.9; margin-bottom:24px; }
 
-.brand-name{
-color:#f5c842;
-font-size:13px;
-letter-spacing:3px;
-}
+    .err-box {
+      background:rgba(245,200,66,0.06);
+      border:1px solid rgba(245,200,66,0.2);
+      border-radius:6px;
+      padding:18px 22px;
+      text-align:left;
+      max-width:300px; width:100%;
+      margin-bottom:24px;
+    }
+    .err-box p { color:#f5c842; font-size:12px; line-height:2.2; }
 
-/* Video overlay */
+    .err-btn {
+      background:#f5c842; border:none;
+      color:#12062b;
+      padding:14px 44px;
+      font-size:12px; letter-spacing:2px;
+      font-family:'Georgia',serif;
+      border-radius:2px; cursor:pointer;
+    }
 
-#video-overlay{
-position:fixed;
-inset:0;
-background:rgba(0,0,0,.88);
-z-index:500;
-display:none;
-flex-direction:column;
-align-items:center;
-justify-content:center;
-padding:20px;
-}
-
-#video-overlay.active{display:flex}
-
-.video-header{
-color:#f5c842;
-margin-bottom:16px;
-}
-
-.video-frame-wrap{
-width:100%;
-max-width:500px;
-aspect-ratio:16/9;
-border:1px solid rgba(245,200,66,.3);
-overflow:hidden;
-}
-
-.video-frame-wrap iframe{
-width:100%;
-height:100%;
-border:none;
-}
-
-.close-btn{
-margin-top:20px;
-background:transparent;
-border:1px solid rgba(245,200,66,.4);
-color:#f5c842;
-padding:10px 32px;
-cursor:pointer;
-}
-
-/* Flash */
-
-#target-flash{
-position:fixed;
-inset:0;
-border:3px solid #f5c842;
-pointer-events:none;
-z-index:200;
-opacity:0;
-transition:opacity .3s;
-}
-
-#target-flash.active{opacity:1}
-
-a-scene{
-position:fixed!important;
-inset:0!important;
-z-index:1!important;
-}
-</style>
+    /* ── Brand watermark ── */
+    #brand {
+      position:fixed; top:14px; left:16px;
+      z-index:6;
+      display:none;
+      align-items:center; gap:8px;
+    }
+    .b-dot { width:7px; height:7px; border-radius:50%; background:#f5c842; box-shadow:0 0 8px #f5c842; }
+    .b-name { color:#f5c842; font-size:11px; letter-spacing:3px; text-transform:uppercase; opacity:0.7; }
+  </style>
 </head>
-
 <body>
 
-<div id="loading-screen">
-<div class="om-symbol">ॐ</div>
-<div class="loading-title">Krishna AR</div>
-<div class="loading-subtitle">Divine Experiences Await</div>
-<div class="loading-bar-wrap"><div class="loading-bar"></div></div>
-</div>
+  <!-- LIVE CAMERA -->
+  <video id="cam" autoplay playsinline muted></video>
 
-<div id="brand-bar">
-<div class="brand-dot"></div>
-<div class="brand-name">Krishna AR Demo</div>
-</div>
+  <!-- DARK TINT (when video plays) -->
+  <div id="tint"></div>
 
-<div id="instructions">
-<span class="scan-icon">📸</span>
-<div class="instruction-text">Point your camera at the image</div>
-</div>
+  <!-- FLOATING VIDEO -->
+  <div id="vid-wrap">
+    <video id="vid" playsinline webkit-playsinline autoplay>
+      <source src="video.mp4" type="video/mp4"/>
+    </video>
+  </div>
 
-<div id="target-flash"></div>
+  <!-- CLOSE BUTTON -->
+  <button id="close-btn" onclick="closeVid()">✕</button>
 
-<div id="video-overlay">
-<div class="video-header">✦ Experience the Divine ✦</div>
-<div class="video-frame-wrap">
-<iframe id="yt-iframe" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-</div>
-<button class="close-btn" onclick="closeVideo()">Close</button>
-</div>
+  <!-- SCAN UI -->
+  <div id="scan-ui">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="scan-line"></div>
+  </div>
 
-<a-scene
-id="scene"
-mindar-image="imageTargetSrc: ./targets.mind; autoStart: false;"
-color-space="sRGB"
-renderer="colorManagement:true"
-vr-mode-ui="enabled:false"
-device-orientation-permission-ui="enabled:false"
->
+  <!-- HINT -->
+  <div id="hint">Point at the image to reveal</div>
 
-<a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+  <!-- REVEAL BUTTON -->
+  <button id="reveal-btn" onclick="revealVideo()">▶ &nbsp;Reveal Experience</button>
 
-<a-entity id="target0" mindar-image-target="targetIndex:0">
+  <!-- BRAND -->
+  <div id="brand">
+    <div class="b-dot"></div>
+    <div class="b-name">Krishna AR</div>
+  </div>
 
-<a-plane
-position="0 0 0.01"
-width="1"
-height="1"
-material="color:#f5c842;opacity:0.15;transparent:true">
-</a-plane>
+  <!-- WELCOME SCREEN -->
+  <div id="welcome">
+    <div class="om">ॐ</div>
+    <div class="w-title">Krishna AR</div>
+    <div class="w-sub">Divine Experiences Await</div>
+    <button class="w-btn" onclick="beginExperience()">▶ &nbsp; Begin</button>
+    <div class="w-note">
+      Open in Google Chrome for best experience<br/>
+      Allow camera access when prompted
+    </div>
+  </div>
 
-<a-text
-value="ॐ"
-position="0 0.65 0.1"
-align="center"
-color="#f5c842"
-width="3">
-</a-text>
-
-</a-entity>
-
-</a-scene>
+  <!-- ERROR SCREEN -->
+  <div id="err">
+    <div class="err-icon">📷</div>
+    <div class="err-title">Camera Access Required</div>
+    <div class="err-body">Camera permission was blocked.<br/>Follow these steps:</div>
+    <div class="err-box">
+      <p>1️⃣ &nbsp;Open this page in <strong>Chrome</strong></p>
+      <p>2️⃣ &nbsp;Tap 🔒 lock icon in address bar</p>
+      <p>3️⃣ &nbsp;Tap Permissions → Camera → Allow</p>
+      <p>4️⃣ &nbsp;Reload the page</p>
+    </div>
+    <button class="err-btn" onclick="retryCamera()">↩ &nbsp;Try Again</button>
+  </div>
 
 <script>
+  // ── How long the "scanning" animation plays before showing the reveal button
+  const SCAN_DURATION_MS = 2500;
 
-const YOUTUBE_URL="https://www.youtube.com/embed/WZECLY-0ImM?autoplay=1";
+  async function beginExperience() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false
+      });
 
-setTimeout(()=>{
-document.getElementById("loading-screen").classList.add("hidden");
-document.getElementById("brand-bar").classList.add("visible");
-},3000);
+      // Attach stream to camera element
+      const cam = document.getElementById('cam');
+      cam.srcObject = stream;
 
-document.addEventListener("DOMContentLoaded", async ()=>{
+      // Hide welcome, show camera UI
+      document.getElementById('welcome').style.display = 'none';
+      cam.style.display = 'block';
+      document.getElementById('scan-ui').style.display = 'block';
+      document.getElementById('hint').style.display = 'block';
+      document.getElementById('brand').style.display = 'flex';
 
-const scene=document.querySelector("#scene");
+      // After scan duration, hide scan UI and show reveal button
+      setTimeout(() => {
+        document.getElementById('scan-ui').style.display = 'none';
+        document.getElementById('hint').style.display = 'none';
+        document.getElementById('reveal-btn').style.display = 'block';
+      }, SCAN_DURATION_MS);
 
-scene.addEventListener("loaded", async ()=>{
+    } catch(e) {
+      document.getElementById('welcome').style.display = 'none';
+      document.getElementById('err').style.display = 'flex';
+    }
+  }
 
-const mindarSystem=scene.systems["mindar-image-system"];
+  function revealVideo() {
+    const vidWrap = document.getElementById('vid-wrap');
+    const vid = document.getElementById('vid');
 
-try{
-await mindarSystem.start();
-console.log("Camera started");
-}catch(err){
-alert("Camera permission required.");
-console.error(err);
-}
+    document.getElementById('reveal-btn').style.display = 'none';
+    document.getElementById('tint').style.display = 'block';
+    document.getElementById('close-btn').style.display = 'flex';
 
-});
+    vidWrap.style.display = 'block';
+    // Small delay so transition plays
+    setTimeout(() => { vidWrap.classList.add('show'); }, 30);
 
-const target=document.querySelector("#target0");
+    vid.load();
+    vid.play().catch(() => {
+      // If autoplay blocked, user can tap the video directly
+    });
+  }
 
-target.addEventListener("targetFound",()=>{
-document.getElementById("target-flash").classList.add("active");
-document.getElementById("instructions").style.display="none";
+  function closeVid() {
+    const vid = document.getElementById('vid');
+    const vidWrap = document.getElementById('vid-wrap');
 
-setTimeout(()=>{
-document.getElementById("target-flash").classList.remove("active");
-openVideo();
-},600);
+    vid.pause();
+    vid.currentTime = 0;
+    vidWrap.classList.remove('show');
 
-});
+    setTimeout(() => { vidWrap.style.display = 'none'; }, 500);
 
-target.addEventListener("targetLost",()=>{
-document.getElementById("instructions").style.display="block";
-});
+    document.getElementById('tint').style.display = 'none';
+    document.getElementById('close-btn').style.display = 'none';
+    document.getElementById('scan-ui').style.display = 'block';
+    document.getElementById('hint').style.display = 'block';
 
-});
+    // Allow scanning again
+    setTimeout(() => {
+      document.getElementById('scan-ui').style.display = 'none';
+      document.getElementById('hint').style.display = 'none';
+      document.getElementById('reveal-btn').style.display = 'block';
+    }, SCAN_DURATION_MS);
+  }
 
-function openVideo(){
-const overlay=document.getElementById("video-overlay");
-const iframe=document.getElementById("yt-iframe");
-iframe.src=YOUTUBE_URL;
-overlay.classList.add("active");
-}
-
-function closeVideo(){
-const overlay=document.getElementById("video-overlay");
-const iframe=document.getElementById("yt-iframe");
-iframe.src="";
-overlay.classList.remove("active");
-}
-
+  function retryCamera() {
+    document.getElementById('err').style.display = 'none';
+    document.getElementById('welcome').style.display = 'flex';
+  }
 </script>
-
 </body>
 </html>
