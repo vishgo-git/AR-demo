@@ -233,7 +233,8 @@ z-index:1!important;
 </div>
 
 <a-scene
-mindar-image="imageTargetSrc: ./targets.mind; autoStart: true;"
+id="scene"
+mindar-image="imageTargetSrc: ./targets.mind; autoStart: false;"
 color-space="sRGB"
 renderer="colorManagement:true"
 vr-mode-ui="enabled:false"
@@ -272,7 +273,23 @@ document.getElementById("loading-screen").classList.add("hidden");
 document.getElementById("brand-bar").classList.add("visible");
 },3000);
 
-document.addEventListener("DOMContentLoaded",()=>{
+document.addEventListener("DOMContentLoaded", async ()=>{
+
+const scene=document.querySelector("#scene");
+
+scene.addEventListener("loaded", async ()=>{
+
+const mindarSystem=scene.systems["mindar-image-system"];
+
+try{
+await mindarSystem.start();
+console.log("Camera started");
+}catch(err){
+alert("Camera permission required.");
+console.error(err);
+}
+
+});
 
 const target=document.querySelector("#target0");
 
@@ -284,6 +301,7 @@ setTimeout(()=>{
 document.getElementById("target-flash").classList.remove("active");
 openVideo();
 },600);
+
 });
 
 target.addEventListener("targetLost",()=>{
