@@ -1,0 +1,401 @@
+Index · HTML
+Copy
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+  <title>Krishna AR Demo</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background:#000;
+      font-family:'Georgia',serif;
+      height:100vh; width:100vw;
+      overflow:hidden;
+      user-select:none;
+      -webkit-user-select:none;
+    }
+
+    /* ── CAMERA (live background) ── */
+    #cam {
+      position:fixed; inset:0; z-index:1;
+      width:100%; height:100%;
+      object-fit:cover;
+      display:none;
+    }
+
+    /* ── DARK TINT over camera when video plays ── */
+    #tint {
+      position:fixed; inset:0; z-index:2;
+      background:rgba(0,0,0,0.55);
+      display:none;
+    }
+
+    /* ── VIDEO floats over camera ── */
+    #vid-wrap {
+      position:fixed;
+      top:50%; left:50%;
+      transform:translate(-50%,-50%) scale(0.85);
+      z-index:3;
+      width:92vw;
+      max-width:480px;
+      aspect-ratio:16/9;
+      border-radius:8px;
+      overflow:hidden;
+      box-shadow:0 0 60px rgba(245,200,66,0.35), 0 20px 60px rgba(0,0,0,0.8);
+      border:1.5px solid rgba(245,200,66,0.4);
+      display:none;
+      opacity:0;
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+
+    #vid-wrap.show {
+      display:block;
+      opacity:1;
+      transform:translate(-50%,-50%) scale(1);
+    }
+
+    #vid {
+      width:100%; height:100%;
+      object-fit:cover;
+      background:#000;
+    }
+
+    /* ── CLOSE button ── */
+    #close-btn {
+      position:fixed;
+      top:16px; right:16px;
+      z-index:10;
+      background:rgba(0,0,0,0.6);
+      border:1px solid rgba(245,200,66,0.5);
+      color:#f5c842;
+      width:38px; height:38px;
+      border-radius:50%;
+      font-size:18px;
+      cursor:pointer;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      -webkit-tap-highlight-color:transparent;
+    }
+
+    /* ── SCAN UI (corners + line) ── */
+    #scan-ui {
+      position:fixed; inset:0; z-index:4;
+      pointer-events:none;
+      display:none;
+    }
+
+    .corner {
+      position:absolute;
+      width:36px; height:36px;
+      border-color:#f5c842; border-style:solid;
+    }
+    .tl { top:22%; left:8%;  border-width:3px 0 0 3px; }
+    .tr { top:22%; right:8%; border-width:3px 3px 0 0; }
+    .bl { bottom:22%; left:8%;  border-width:0 0 3px 3px; }
+    .br { bottom:22%; right:8%; border-width:0 3px 3px 0; }
+
+    .scan-line {
+      position:absolute;
+      left:8%; right:8%;
+      height:2px;
+      background:linear-gradient(to right, transparent, #f5c842, transparent);
+      animation: sweep 2s ease-in-out infinite;
+    }
+    @keyframes sweep {
+      0%   { top:22%; opacity:1; }
+      100% { top:78%; opacity:0.2; }
+    }
+
+    /* ── TAP TO REVEAL button (shown after scanning) ── */
+    #reveal-btn {
+      position:fixed;
+      bottom:10%;
+      left:50%;
+      transform:translateX(-50%);
+      z-index:5;
+      background:#f5c842;
+      color:#1a0a2e;
+      border:none;
+      padding:15px 44px;
+      font-size:14px;
+      letter-spacing:3px;
+      text-transform:uppercase;
+      font-family:'Georgia',serif;
+      border-radius:3px;
+      cursor:pointer;
+      display:none;
+      white-space:nowrap;
+      -webkit-tap-highlight-color:transparent;
+      animation:pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow:0 4px 20px rgba(245,200,66,0.4); }
+      50%      { box-shadow:0 4px 50px rgba(245,200,66,0.8); }
+    }
+
+    /* ── SCAN HINT text ── */
+    #hint {
+      position:fixed;
+      bottom:6%;
+      left:50%; transform:translateX(-50%);
+      z-index:5;
+      color:rgba(245,200,66,0.75);
+      font-size:12px;
+      letter-spacing:2px;
+      text-align:center;
+      white-space:nowrap;
+      display:none;
+      text-shadow:0 1px 6px rgba(0,0,0,0.9);
+    }
+
+    /* ── WELCOME SCREEN ── */
+    #welcome {
+      position:fixed; inset:0; z-index:20;
+      background:linear-gradient(160deg,#12062b 0%,#2a1155 50%,#12062b 100%);
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:32px; text-align:center;
+    }
+
+    .om {
+      font-size:88px; color:#f5c842;
+      animation:omGlow 3s ease-in-out infinite;
+      margin-bottom:12px;
+      line-height:1;
+    }
+    @keyframes omGlow {
+      0%,100% { text-shadow:0 0 30px rgba(245,200,66,0.4); }
+      50%      { text-shadow:0 0 80px rgba(245,200,66,0.9); }
+    }
+
+    .w-title {
+      color:#f5c842;
+      font-size:22px; letter-spacing:6px;
+      text-transform:uppercase;
+      margin-bottom:6px;
+    }
+
+    .w-sub {
+      color:rgba(245,200,66,0.45);
+      font-size:12px; letter-spacing:2px;
+      margin-bottom:52px;
+    }
+
+    .w-btn {
+      background:transparent;
+      border:1.5px solid #f5c842;
+      color:#f5c842;
+      padding:16px 52px;
+      font-size:13px; letter-spacing:4px;
+      text-transform:uppercase;
+      font-family:'Georgia',serif;
+      border-radius:2px;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+      transition:background 0.2s;
+    }
+    .w-btn:active { background:rgba(245,200,66,0.12); }
+
+    .w-note {
+      color:rgba(245,200,66,0.3);
+      font-size:10px; letter-spacing:1px;
+      margin-top:18px; line-height:1.8;
+    }
+
+    /* ── ERROR SCREEN ── */
+    #err {
+      position:fixed; inset:0; z-index:30;
+      background:#12062b;
+      display:none; flex-direction:column;
+      align-items:center; justify-content:center;
+      padding:32px; text-align:center;
+    }
+
+    .err-icon { font-size:52px; margin-bottom:16px; }
+    .err-title { color:#f5c842; font-size:17px; letter-spacing:2px; margin-bottom:10px; }
+    .err-body  { color:rgba(255,255,255,0.55); font-size:12px; line-height:1.9; margin-bottom:24px; }
+
+    .err-box {
+      background:rgba(245,200,66,0.06);
+      border:1px solid rgba(245,200,66,0.2);
+      border-radius:6px;
+      padding:18px 22px;
+      text-align:left;
+      max-width:300px; width:100%;
+      margin-bottom:24px;
+    }
+    .err-box p { color:#f5c842; font-size:12px; line-height:2.2; }
+
+    .err-btn {
+      background:#f5c842; border:none;
+      color:#12062b;
+      padding:14px 44px;
+      font-size:12px; letter-spacing:2px;
+      font-family:'Georgia',serif;
+      border-radius:2px; cursor:pointer;
+    }
+
+    /* ── Brand watermark ── */
+    #brand {
+      position:fixed; top:14px; left:16px;
+      z-index:6;
+      display:none;
+      align-items:center; gap:8px;
+    }
+    .b-dot { width:7px; height:7px; border-radius:50%; background:#f5c842; box-shadow:0 0 8px #f5c842; }
+    .b-name { color:#f5c842; font-size:11px; letter-spacing:3px; text-transform:uppercase; opacity:0.7; }
+  </style>
+</head>
+<body>
+
+  <!-- LIVE CAMERA -->
+  <video id="cam" autoplay playsinline muted></video>
+
+  <!-- DARK TINT (when video plays) -->
+  <div id="tint"></div>
+
+  <!-- FLOATING VIDEO -->
+  <div id="vid-wrap">
+    <video id="vid" playsinline webkit-playsinline autoplay>
+      <source src="video.mp4" type="video/mp4"/>
+    </video>
+  </div>
+
+  <!-- CLOSE BUTTON -->
+  <button id="close-btn" onclick="closeVid()">✕</button>
+
+  <!-- SCAN UI -->
+  <div id="scan-ui">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div class="scan-line"></div>
+  </div>
+
+  <!-- HINT -->
+  <div id="hint">Point at the image to reveal</div>
+
+  <!-- REVEAL BUTTON -->
+  <button id="reveal-btn" onclick="revealVideo()">▶ &nbsp;Reveal Experience</button>
+
+  <!-- BRAND -->
+  <div id="brand">
+    <div class="b-dot"></div>
+    <div class="b-name">Krishna AR</div>
+  </div>
+
+  <!-- WELCOME SCREEN -->
+  <div id="welcome">
+    <div class="om">ॐ</div>
+    <div class="w-title">Krishna AR</div>
+    <div class="w-sub">Divine Experiences Await</div>
+    <button class="w-btn" onclick="beginExperience()">▶ &nbsp; Begin</button>
+    <div class="w-note">
+      Open in Google Chrome for best experience<br/>
+      Allow camera access when prompted
+    </div>
+  </div>
+
+  <!-- ERROR SCREEN -->
+  <div id="err">
+    <div class="err-icon">📷</div>
+    <div class="err-title">Camera Access Required</div>
+    <div class="err-body">Camera permission was blocked.<br/>Follow these steps:</div>
+    <div class="err-box">
+      <p>1️⃣ &nbsp;Open this page in <strong>Chrome</strong></p>
+      <p>2️⃣ &nbsp;Tap 🔒 lock icon in address bar</p>
+      <p>3️⃣ &nbsp;Tap Permissions → Camera → Allow</p>
+      <p>4️⃣ &nbsp;Reload the page</p>
+    </div>
+    <button class="err-btn" onclick="retryCamera()">↩ &nbsp;Try Again</button>
+  </div>
+
+<script>
+  // ── How long the "scanning" animation plays before showing the reveal button
+  const SCAN_DURATION_MS = 2500;
+
+  async function beginExperience() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+        audio: false
+      });
+
+      // Attach stream to camera element
+      const cam = document.getElementById('cam');
+      cam.srcObject = stream;
+
+      // Hide welcome, show camera UI
+      document.getElementById('welcome').style.display = 'none';
+      cam.style.display = 'block';
+      document.getElementById('scan-ui').style.display = 'block';
+      document.getElementById('hint').style.display = 'block';
+      document.getElementById('brand').style.display = 'flex';
+
+      // After scan duration, hide scan UI and show reveal button
+      setTimeout(() => {
+        document.getElementById('scan-ui').style.display = 'none';
+        document.getElementById('hint').style.display = 'none';
+        document.getElementById('reveal-btn').style.display = 'block';
+      }, SCAN_DURATION_MS);
+
+    } catch(e) {
+      document.getElementById('welcome').style.display = 'none';
+      document.getElementById('err').style.display = 'flex';
+    }
+  }
+
+  function revealVideo() {
+    const vidWrap = document.getElementById('vid-wrap');
+    const vid = document.getElementById('vid');
+
+    document.getElementById('reveal-btn').style.display = 'none';
+    document.getElementById('tint').style.display = 'block';
+    document.getElementById('close-btn').style.display = 'flex';
+
+    vidWrap.style.display = 'block';
+    // Small delay so transition plays
+    setTimeout(() => { vidWrap.classList.add('show'); }, 30);
+
+    vid.load();
+    vid.play().catch(() => {
+      // If autoplay blocked, user can tap the video directly
+    });
+  }
+
+  function closeVid() {
+    const vid = document.getElementById('vid');
+    const vidWrap = document.getElementById('vid-wrap');
+
+    vid.pause();
+    vid.currentTime = 0;
+    vidWrap.classList.remove('show');
+
+    setTimeout(() => { vidWrap.style.display = 'none'; }, 500);
+
+    document.getElementById('tint').style.display = 'none';
+    document.getElementById('close-btn').style.display = 'none';
+    document.getElementById('scan-ui').style.display = 'block';
+    document.getElementById('hint').style.display = 'block';
+
+    // Allow scanning again
+    setTimeout(() => {
+      document.getElementById('scan-ui').style.display = 'none';
+      document.getElementById('hint').style.display = 'none';
+      document.getElementById('reveal-btn').style.display = 'block';
+    }, SCAN_DURATION_MS);
+  }
+
+  function retryCamera() {
+    document.getElementById('err').style.display = 'none';
+    document.getElementById('welcome').style.display = 'flex';
+  }
+</script>
+</body>
+</html>
